@@ -1,0 +1,59 @@
+# GNU Health HMIS 5.0 — stack para Coolify
+# Compone: PostgreSQL 16 + GNU Health/Tryton 7.0 + cliente web SAO (puerto 8000)
+#
+# En Coolify, las variables de entorno se definen en el panel de la aplicación
+# (Environment Variables); copia los nombres desde .env.example.
+# Localmente: copia .env.example a .env, ajusta las claves y `docker compose up`.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-gnuhealth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-gnuhealth}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gnuhealth} -d ${DB_NAME:-gnuhealth}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - gh-net
+
+  gnuhealth:
+    build: .
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-gnuhealth}
+      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-gnuhealth}
+      # Credenciales del primer superusuario ("admin") de Tryton/GNU Health
+      TRYTON_ADMIN_PASSWORD: ${TRYTON_ADMIN_PASSWORD:?Define TRYTON_ADMIN_PASSWORD}
+      TRYTON_ADMIN_EMAIL: ${TRYTON_ADMIN_EMAIL:-admin@example.com}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - gh-data:/var/lib/gnuhealth
+    expose:
+      - "8000"
+    # Útil para probar en local con `http://localhost:8000`.
+    # En Coolify puedes quitar este mapeo: el proxy enruta al puerto 8000 del
+    # contenedor directamente.
+    ports:
+      - "${SAO_PORT:-8000}:8000"
+    networks:
+      - gh-net
+
+volumes:
+  db-data:
+  gh-data:
+
+networks:
+  gh-net:
